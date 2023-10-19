@@ -1,0 +1,404 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="TcpConnection" Id="{8ab27a36-757a-4cd6-9959-02d6bd57acf3}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK TcpConnection
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	fbSocketListion : FB_SocketListen;
+	fbSocketAccept : FB_SocketAccept;
+	fbSocketConnect : FB_SocketConnect;
+	fbSocketClose : FB_SocketClose;
+	fbSocketCloseAll : FB_SocketCloseAll;
+	fbSocketSend : FB_SocketSend;
+	fbSocketReceive : FB_SocketReceive;
+	fbGetLinkStatus: FB_SocketGetLinkStatus;
+	
+	CurrentSocket : T_HSOCKET;
+	bEstablished : BOOL;
+	_HistorySocketIndex : UDINT := 0;
+	_HistorySocket : ARRAY[0..HISTORYSOCKET_MAX] OF T_HSOCKET;
+	
+	ErrorID : UDINT;
+	
+END_VAR
+
+VAR CONSTANT
+	SOCKETEMPTY: T_HSOCKET 
+		:= (handle := 0, 
+			localAddr := (nPort := 0, sAddr := ''), 
+			remoteAddr := (nPort := 0, sAddr := ''));
+	HISTORYSOCKET_MAX: UDINT  := 19;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="CheckState" Id="{1bf5cbcd-bb6a-4189-a066-938724933362}">
+      <Declaration><![CDATA[METHOD CheckState : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[fbGetLinkStatus.hSocket := CurrentSocket;
+fbGetLinkStatus(bExecute:= TRUE);
+IF fbGetLinkStatus.bBusy THEN
+	(*Checking*)
+ELSE
+	IF fbGetLinkStatus.bError OR fbGetLinkStatus.bLinkError THEN
+		CheckState := TRUE;
+		ErrorID := fbGetLinkStatus.nErrId;
+	ELSE
+		CheckState := FALSE;
+	END_IF
+	fbGetLinkStatus(bExecute:= FALSE);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Close" Id="{f6e4275e-bfd3-4c63-9d70-832ee22b113e}">
+      <Declaration><![CDATA[METHOD Close : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF CurrentSocket.handle = 0 THEN
+	Close := FALSE;
+ELSE
+	fbSocketClose.hSocket := CurrentSocket;
+	fbSocketClose(bExecute := TRUE);
+	IF fbSocketClose.bBusy THEN
+		(* Closing *)
+	ELSE
+		IF fbSocketClose.bError THEN
+			Close := FALSE;
+			ErrorID := fbSocketClose.nErrId;
+		ELSE
+			Close := TRUE;
+		END_IF
+		(* Whether the connection is closed or not, clear the CurrentSocket *)
+		fbSocketClose(bExecute := FALSE);
+		CurrentSocket := SOCKETEMPTY;
+	END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="CloseAll" Id="{905a008b-47b2-49e8-b665-bbe2d02c7168}">
+      <Declaration><![CDATA[METHOD INTERNAL CloseAll : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[fbSocketCloseAll(bExecute:= TRUE);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Connect" Id="{9aaa307b-a96f-477e-b78f-462f241ea09e}">
+      <Declaration><![CDATA[METHOD Connect : BOOL
+VAR_INPUT
+	RemoteIpAddr : T_IPv4Addr;
+	RemotePort : UDINT;
+END_VAR
+
+VAR
+
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF CurrentSocket.handle <> 0 THEN
+	Connect := TRUE;
+	RETURN;
+ELSE
+	IF RemoteIpAddr = '' OR RemotePort = 0 THEN
+		Connect := FALSE;
+		RETURN;
+	ELSE
+		fbSocketConnect.sRemoteHost := RemoteIpAddr;
+		fbSocketConnect.nRemotePort := RemotePort;
+		fbSocketConnect(bExecute := TRUE);
+		IF fbSocketConnect.bBusy THEN
+			(* Connecting *)
+		ELSE
+			IF fbSocketConnect.bError THEN
+				fbSocketConnect(bExecute := FALSE);
+				Connect := FALSE;
+				ErrorID := fbSocketConnect.nErrId;
+			ELSE
+				fbSocketConnect(bExecute := FALSE);
+				CurrentSocket := fbSocketConnect.hSocket;
+				(* Store to history array *)
+				IF _HistorySocketIndex > HISTORYSOCKET_MAX THEN
+					_HistorySocketIndex := 0;
+				END_IF
+				_HistorySocket[_HistorySocketIndex] := fbSocketConnect.hSocket;
+				
+			END_IF
+		END_IF
+	END_IF
+END_IF
+
+]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="ErrID" Id="{902c1ef9-1c9a-45a7-a5f7-930bb7bebdc7}">
+      <Declaration><![CDATA[PROPERTY ErrID : udint]]></Declaration>
+      <Get Name="Get" Id="{aa54e7d2-6919-4aef-baa8-36b9563757ff}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[ErrID := ErrorID;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Action Name="fbCall" Id="{79d53172-eaa0-4c36-9f34-d5d4765961cf}">
+      <Implementation>
+        <ST><![CDATA[fbSocketListion(
+	sSrvNetId:= , 
+	sLocalHost:= , 
+	nLocalPort:= , 
+	bExecute:= , 
+	tTimeout:= , 
+	bBusy=> , 
+	bError=> , 
+	nErrId=> , 
+	hListener=> );
+fbSocketAccept(
+	sSrvNetId:= , 
+	hListener:= , 
+	bExecute:= , 
+	tTimeout:= , 
+	bAccepted=> , 
+	bBusy=> , 
+	bError=> , 
+	nErrId=> , 
+	hSocket=> );
+fbSocketConnect(
+	sSrvNetId:= , 
+	sRemoteHost:= , 
+	nRemotePort:= , 
+	bExecute:= , 
+	tTimeout:= , 
+	bBusy=> , 
+	bError=> , 
+	nErrId=> , 
+	hSocket=> );
+fbSocketClose(
+	sSrvNetId:= , 
+	hSocket:= , 
+	bExecute:= , 
+	tTimeout:= , 
+	bBusy=> , 
+	bError=> , 
+	nErrId=> );
+fbSocketCloseAll(
+	sSrvNetId:= , 
+	bExecute:= , 
+	tTimeout:= , 
+	bBusy=> , 
+	bError=> , 
+	nErrId=> );
+fbSocketSend(
+	sSrvNetId:= , 
+	hSocket:= , 
+	cbLen:= , 
+	pSrc:= , 
+	bExecute:= , 
+	tTimeout:= , 
+	bBusy=> , 
+	bError=> , 
+	nErrId=> );
+fbSocketReceive(
+	sSrvNetId:= , 
+	hSocket:= , 
+	cbLen:= , 
+	pDest:= , 
+	bExecute:= , 
+	tTimeout:= , 
+	bBusy=> , 
+	bError=> , 
+	nErrId=> , 
+	nRecBytes=> );]]></ST>
+      </Implementation>
+    </Action>
+    <Property Name="hSocket" Id="{82fc8d72-48ab-4d32-942d-05670e227e20}">
+      <Declaration><![CDATA[PROPERTY hSocket : T_HSOCKET]]></Declaration>
+      <Get Name="Get" Id="{f574aed7-5107-46a4-9eeb-e9c8bed9b464}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[hSocket := CurrentSocket;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Method Name="Receive" Id="{98be8af7-8111-48f7-9d93-c08d968bb4d6}">
+      <Declaration><![CDATA[METHOD Receive : UDINT
+VAR_INPUT
+	pData : POINTER TO BYTE;
+	nLength : UDINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF pData = 0 OR nLength = 0 THEN
+	Receive := 0;
+	RETURN;
+ELSE
+	fbSocketReceive.pDest := pData;
+	fbSocketReceive.cbLen := nLength;
+	fbSocketReceive.hSocket := CurrentSocket;
+	fbSocketReceive(bExecute:= TRUE);
+	IF fbSocketReceive.bBusy THEN
+		(* Receiving *)
+	ELSE
+		IF fbSocketReceive.bError THEN
+			Receive := 0;
+			ErrorID := fbSocketReceive.nErrId;
+		ELSE
+			Receive := fbSocketReceive.nRecBytes;
+		END_IF
+		fbSocketReceive(bExecute:= FALSE);
+	END_IF
+END_IF
+]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Send" Id="{d4bef882-7da4-41a0-9aef-03df82d24bc9}">
+      <Declaration><![CDATA[METHOD Send : BOOL
+VAR_INPUT
+	pData : POINTER TO BYTE;
+	nLength : UDINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF pData = 0 OR nLength = 0 THEN
+	Send := FALSE;
+	RETURN;
+ELSE
+	fbSocketSend.pSrc := pData;
+	fbSocketSend.cbLen := nLength;
+	fbSocketSend.hSocket := CurrentSocket;
+	fbSocketSend(bExecute:=TRUE);
+	IF fbSocketSend.bBusy THEN
+		(* Sending *)
+	ELSE
+		IF fbSocketSend.bError THEN
+			Send := FALSE;
+			ErrorID := fbSocketSend.nErrId;
+		ELSE
+			Send := TRUE;
+		END_IF
+		fbSocketSend(bExecute:=FALSE);
+	END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="TcpConnection">
+      <LineId Id="52" Count="0" />
+    </LineIds>
+    <LineIds Name="TcpConnection.CheckState">
+      <LineId Id="14" Count="0" />
+      <LineId Id="8" Count="0" />
+      <LineId Id="15" Count="1" />
+      <LineId Id="18" Count="2" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="22" Count="1" />
+      <LineId Id="21" Count="0" />
+      <LineId Id="24" Count="0" />
+      <LineId Id="17" Count="0" />
+    </LineIds>
+    <LineIds Name="TcpConnection.Close">
+      <LineId Id="5" Count="1" />
+      <LineId Id="8" Count="4" />
+      <LineId Id="14" Count="2" />
+      <LineId Id="29" Count="0" />
+      <LineId Id="18" Count="1" />
+      <LineId Id="17" Count="0" />
+      <LineId Id="28" Count="0" />
+      <LineId Id="26" Count="1" />
+      <LineId Id="13" Count="0" />
+      <LineId Id="7" Count="0" />
+    </LineIds>
+    <LineIds Name="TcpConnection.CloseAll">
+      <LineId Id="6" Count="0" />
+    </LineIds>
+    <LineIds Name="TcpConnection.Connect">
+      <LineId Id="5" Count="0" />
+      <LineId Id="40" Count="0" />
+      <LineId Id="57" Count="0" />
+      <LineId Id="36" Count="0" />
+      <LineId Id="41" Count="0" />
+      <LineId Id="58" Count="0" />
+      <LineId Id="60" Count="1" />
+      <LineId Id="63" Count="1" />
+      <LineId Id="66" Count="0" />
+      <LineId Id="85" Count="0" />
+      <LineId Id="87" Count="0" />
+      <LineId Id="89" Count="2" />
+      <LineId Id="98" Count="0" />
+      <LineId Id="115" Count="0" />
+      <LineId Id="96" Count="1" />
+      <LineId Id="99" Count="0" />
+      <LineId Id="105" Count="0" />
+      <LineId Id="101" Count="3" />
+      <LineId Id="106" Count="0" />
+      <LineId Id="92" Count="0" />
+      <LineId Id="100" Count="0" />
+      <LineId Id="59" Count="0" />
+      <LineId Id="37" Count="0" />
+      <LineId Id="16" Count="0" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+    <LineIds Name="TcpConnection.ErrID.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="TcpConnection.fbCall">
+      <LineId Id="13" Count="8" />
+      <LineId Id="12" Count="0" />
+      <LineId Id="23" Count="8" />
+      <LineId Id="22" Count="0" />
+      <LineId Id="2" Count="9" />
+      <LineId Id="33" Count="6" />
+      <LineId Id="1" Count="0" />
+      <LineId Id="41" Count="5" />
+      <LineId Id="40" Count="0" />
+      <LineId Id="48" Count="8" />
+      <LineId Id="47" Count="0" />
+      <LineId Id="58" Count="9" />
+      <LineId Id="57" Count="0" />
+    </LineIds>
+    <LineIds Name="TcpConnection.hSocket.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="TcpConnection.Receive">
+      <LineId Id="19" Count="1" />
+      <LineId Id="22" Count="1" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="36" Count="1" />
+      <LineId Id="30" Count="0" />
+      <LineId Id="38" Count="1" />
+      <LineId Id="41" Count="2" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="45" Count="1" />
+      <LineId Id="44" Count="0" />
+      <LineId Id="47" Count="0" />
+      <LineId Id="40" Count="0" />
+      <LineId Id="21" Count="0" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="TcpConnection.Send">
+      <LineId Id="5" Count="0" />
+      <LineId Id="8" Count="0" />
+      <LineId Id="12" Count="0" />
+      <LineId Id="10" Count="1" />
+      <LineId Id="13" Count="4" />
+      <LineId Id="19" Count="1" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="28" Count="0" />
+      <LineId Id="24" Count="0" />
+      <LineId Id="26" Count="0" />
+      <LineId Id="22" Count="0" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="18" Count="0" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>
