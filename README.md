@@ -16,7 +16,7 @@ IF TcpConnection.Connect('192.168.88.136', 60002) THEN
   //Receive cyclically
 	recvBytes := TcpConnection.Receive(ADR(dataToRecv), SIZEOF(dataToRecv));
 
-  //If connection failed, close currect connection and the connection method will reconnection automatically
+  //If connection failed, close currect connection and the connection method will reconnect automatically
 	IF ConnectionStatus THEN
 		TcpConnection.Close();
 	END_IF
